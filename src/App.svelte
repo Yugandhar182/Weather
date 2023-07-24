@@ -1,8 +1,9 @@
 
-
 <script>
   import { onMount } from 'svelte';
   import 'bootstrap/dist/css/bootstrap.min.css';
+  import WeatherFetcher from './WeatherFetchcity.svelte';
+  import Modal from './Modal.svelte';
 
   const apiKey = '16a3974f03c4fcccc82c44efdd5a6a3f';
   let city = '';
@@ -12,82 +13,123 @@
   let errorMessage = '';
   let currentTemperature = null;
   let cityName = null;
+   let currenthumidity =null;
+   let currentWindSpeed = null;
   let savedCities = [];
-  let savedCitiesModalStyle = '';
-  let savedCitiesModalContent = '';
+
+  const clearWeatherData = () => {
+  locationInfo = '';
+  currentTemperature = null;
+  currenthumidity = null;
+  currentWindSpeed = null;
+  cityName = null;
+  weatherData = null;
+};
 
 
-  const saveCity = () => {
-  if (cityName && !savedCities.includes(cityName)) {
-    savedCities = [...savedCities, cityName];
-    localStorage.setItem('savedCities', JSON.stringify(savedCities));
-    showSaveSuccessAlert();
-  }else {
-    alert('This city is already saved.');
+  const fetchWeatherData = async () => {
+  try {
+    const response = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`);
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
+    }
+    const data = await response.json();
+    weatherData = data.list;
+    const { name, state, country } = data.city;
+    locationInfo = state ? `Weather in ${name}, ${state}, ${country}` : `Weather in ${name}, ${country}`;
+    currentTemperature = data.list[0].main.temp;
+    currenthumidity = data.list[0].main.humidity;
+    currentWindSpeed = data.list[0].wind.speed; // New line to fetch wind speed
+    cityName = name;
+    city = name;
+    showFilteredData();
+    closeModal();
+  } catch (error) {
+    console.error('Error fetching weather data:', error);
+    displayModal('Invalid city name ,could you please check the spelling .');
   }
 };
-const showSaveSuccessAlert = () => {
-  alert('City saved successfully!');
-};
-onMount(() => {
-  const savedCitiesFromLocalStorage = localStorage.getItem('savedCities');
-  if (savedCitiesFromLocalStorage) {
-    savedCities = JSON.parse(savedCitiesFromLocalStorage);
+
+       const saveCity = async () => {
+               if (savedCities.length >= 5) {
+                alert('You can only add up to 5 cities.');
+                } 
+                else if (!city) { 
+                displayModal('Please enter a valid city name.');
+                } 
+              else if (savedCities.some((cityObj) => cityObj.city === city)) { 
+                alert('The city is already saved.');
+              } 
+               else {
+              try {
+              const response = await fetch(
+            `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`
+            );
+            if (!response.ok) {
+            throw new Error('Network response was not ok');
+            }
+          const data = await response.json();
+
+      // Extract the necessary weather information for the current city
+      const temperature = data.list[0].main.temp;
+      const humidity = data.list[0].main.humidity;
+      const windSpeed = data.list[0].wind.speed;
+
+      savedCities = [
+        ...savedCities,
+        {
+          city,
+          temperature,
+          humidity,
+          windSpeed,
+        },
+      ];
+
+      localStorage.setItem('savedCities', JSON.stringify(savedCities));
+      clearWeatherData(); // Clear weather details after saving the city
+      city = ''; // Clear the input field after saving the city
+    } catch (error) {
+      console.error('Error fetching weather data:', error);
+      displayModal('Invalid city name.');
+    }
   }
-});
-
-
-const showSavedCities = () => {
-  const cityList = savedCities.join(', ');
-  displaySavedCitiesModal(`Saved Cities: ${cityList}`);
 };
 
 
-const closeSavedCitiesModal = () => {
-  savedCitiesModalStyle = '';
-};
+
+const fetchWeatherForLastCity = async () => {
+    const lastCity = localStorage.getItem('lastCity');
+    if (lastCity) {
+      city = lastCity;
+      await fetchWeatherData();
+    }
+  };
+  
+ 
+  onMount(async () => {
+    const savedCitiesFromLocalStorage = localStorage.getItem('savedCities');
+    if (savedCitiesFromLocalStorage) {
+      savedCities = JSON.parse(savedCitiesFromLocalStorage);
+    }
+
+    await fetchWeatherForLastCity();
+  });
 
 
-const displaySavedCitiesModal = (message) => {
-  savedCitiesModalStyle = 'display: block;';
-  savedCitiesModalContent = message;
-};
-const removeCity = (cityToRemove) => {
-  savedCities = savedCities.filter(city => city !== cityToRemove);
+  const removeCity = (cityToRemove) => {
+  savedCities = savedCities.filter((city) => city.city !== cityToRemove);
   localStorage.setItem('savedCities', JSON.stringify(savedCities));
 };
 
+const closeModal = () => {
+    modalStyle = '';
+    errorMessage = '';
+  };
 
   const displayModal = (message) => {
     errorMessage = message;
     modalStyle = 'display: block;';
   };
-
-  const closeModal = () => {
-    modalStyle = '';
-    errorMessage = '';
-  };
-
-  const fetchWeatherData = async () => {
-    try {
-      const response = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`);
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      const data = await response.json();
-      weatherData = data.list;
-      const { name, state, country } = data.city;
-      locationInfo = state ? `Weather in ${name}, ${state}, ${country}` : `Weather in ${name}, ${country}`;
-      currentTemperature = data.list[0].main.temp; 
-      cityName = name; 
-      showFilteredData();
-      closeModal(); 
-    } catch (error) {
-      console.error('Error fetching weather data:', error);
-      displayModal('Please enter a valid city name and could  please check the spelling.');
-    }
-  };
-
   
   const filterWeatherForNextFiveDays = (data) => {
     const filteredData = {};
@@ -101,7 +143,7 @@ const removeCity = (cityToRemove) => {
       const timeDiff = itemDate.getTime() - currentDate.getTime();
       const daysDiff = timeDiff / (1000 * 3600 * 24);
 
-      if (daysDiff >= 0 && daysDiff <= 4) {
+      if (daysDiff >= 0 && daysDiff <=5) {
         const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][itemDate.getDay()];
         if (!filteredData[dayName]) {
           filteredData[dayName] = {
@@ -117,6 +159,7 @@ const removeCity = (cityToRemove) => {
     return filteredData;
   };
 
+
   const showFilteredData = () => {
     const filteredData = filterWeatherForNextFiveDays(weatherData);
     weatherData = filteredData;
@@ -126,12 +169,55 @@ const removeCity = (cityToRemove) => {
     closeModal(); 
   });
 
-  onMount(() => {
-    closeModal();
-   
+ 
+ 
+ 
+  onMount(async () => {
+    const savedCitiesFromLocalStorage = localStorage.getItem('savedCities');
+    if (savedCitiesFromLocalStorage) {
+      savedCities = JSON.parse(savedCitiesFromLocalStorage);
+    }
+
+    await fetchWeatherForLastCity();
+  
   });
+  const fetchWeatherDataForCity = async (city) => {
+  try {
+    closeModal();
+    city = city.trim(); 
+    if (city) {
+      // Fetch weather data for the clicked city
+      const response = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`);
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+               const data = await response.json();
+              weatherData = data.list;
+              const { name, state, country } = data.city;
+              locationInfo = state ? `Weather in ${name}, ${state}, ${country}` : `Weather in ${name}, ${country}`;
+              currentTemperature = data.list[0].main.temp;
+              currenthumidity = data.list[0].main.humidity;
+              currentWindSpeed = data.list[0].wind.speed; // New line to fetch wind speed
+              cityName = name;
+              city = name; // Update the value of the search input to the clicked city name
+
+
+        showFilteredData(); // Call showFilteredData after weatherData is set
+           } else {
+               displayModal('Please enter a valid city name.');
+          }
+           } catch (error) {
+               console.error('Error fetching weather data:', error);
+               displayModal('Error fetching weather data for the selected city. Please try again later.');
+           }
+          };
+
+
 </script>
 
+<div class="weather-heading">
+<h1 style="color:Violet;">Weather Report</h1>
+</div>
 
 {#if currentTemperature && cityName}
   <div class="current-weather">
@@ -141,106 +227,81 @@ const removeCity = (cityToRemove) => {
 
 <main class="container mt-4">
   <div class="row">
-    <div class="col-md-6 offset-md-3">
-      <input type="text" class="form-control mb-2" bind:value={city} placeholder="Enter city name" />
-      <button class="btn btn-primary btn-block" on:click={fetchWeatherData}>Get Weather</button>
-      <span class="spacer"></span>
- 
-      <button class="btn btn-success btn-block mt-2" on:click={saveCity}>Save City</button>
+    <div class="col-md-6">
 
-      
-      <button class="btn btn-info btn-block mt-2" on:click={showSavedCities}>Show Saved Cities</button>
-      
-      {#if locationInfo}
-      <h2 style="color: chartreuse;">{locationInfo}</h2>
-      {#if weatherData}
-        <div class="weather-cards">
-          {#each Object.entries(weatherData) as [day, data]}
-            <div class="weather-card">
-              <h3>{day}</h3>
-              <p>Temperature: {data.temperature}°C</p>
-              <p>Humidity: {data.humidity}%</p>
-              <p>Wind Speed: {data.windSpeed} m/s</p>
-              <p>Description: {data.description}</p>
-            </div>
-          {/each}
-        </div>
-      {:else}
-        <p>No weather data available</p>
-      {/if}
-    {:else}
-      <p>Enter a city name to get weather data.</p>
-    {/if}
+      <div class="left-container">
+        {#if savedCities.length > 0}
+          <h3 style="color: white;">Added Cities:</h3>
+          <ul>
+            {#each savedCities as cityObj}
+              <li class="card">
+                <div class="saved-cities-card-body">
+                  <h5 style="color: blue;" class="city-name" on:click={() => fetchWeatherDataForCity(cityObj.city)}>{cityObj.city}</h5>
+                  <div class="weather-info">
+                    <p>T: {cityObj.temperature}°C , H: {cityObj.humidity}%, Wind: {cityObj.windSpeed} m/s</p>
+                    <span class="close-box" on:click={() => removeCity(cityObj.city)}>
+                      <span class="close-symbol">&times;</span>
+                    </span>
+                  </div>
+                </div>
+              </li>
+            {/each}
+          </ul>
+          
+        {:else}
+        <p style="color: white;">No Added cities.</p>
+    
+        {/if}
+      </div>
+    </div>
+    
+    <div class="col-md-6">
+      <input type="text" class="form-control mb-2"  bind:value={city}  placeholder="Enter city name" on:input={clearWeatherData}/>
+    <button class="btn btn-primary btn-block" on:click={fetchWeatherData}>Get Weather</button>
+    <span class="spacer"></span>
+    <button class="btn btn-success btn-block mt-2" on:click={saveCity}>Add City</button>
+    
+    <WeatherFetcher
+    city={city}
+    currentTemperature={currentTemperature}
+    currenthumidity={currenthumidity}
+    currentWindSpeed={currentWindSpeed}
+    locationInfo={locationInfo}
+    weatherData={weatherData}
+    errorMessage={errorMessage}/>
+
   </div>
 </div>
 </main>
 
-<div class="modal" tabindex="-1" role="dialog" style="{modalStyle}">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Error</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close" on:click={closeModal}>
-        
-        </button>
-      </div>
-      <div class="modal-body">
-        {errorMessage}
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal" on:click={closeModal}>Close</button>
-      </div>
-    </div>
-  </div>
-</div>
+<Modal modalStyle={modalStyle} errorMessage={errorMessage} closeModal={closeModal} />
 
-<div class="modal" tabindex="-1" role="dialog" style="{savedCitiesModalStyle}">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Saved Cities</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close" on:click={closeSavedCitiesModal}>
-          
-        </button>
-      </div>
-      <div class="modal-body">
-        {#if savedCities.length > 0}
-        {#each savedCities as city}
-          <div>
-            <span>{city}</span>
-            <button class="btn btn-sm btn-danger" on:click={() => removeCity(city)}>Remove</button>
-          </div>
-        {/each}
-      {:else}
-        <p>No saved cities.</p>
-      {/if}
-      
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal" on:click={closeSavedCitiesModal}>Close</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <style>
   main.container {
-    background-image: url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?fit=crop&w=1300&q=80');
-    margin-bottom: -10px;
-   margin-left: 90px;
+    background-image: url('https://images.unsplash.com/photo-1587588767216-c2005117cbf8?fit=crop&w=1300&q=80');
+    margin-bottom: -20px;
+   margin-left: 100px;
     height: 700px;
-   
-    width: 1100px;
-   
-    height: 700px;
+    width: 1300px;
     overflow: auto;
     position: relative; 
   }
+  .left-container {
+   
+    margin-bottom: -10px;
+    padding: 20px;
+    text-align: center;
+    font-size: 24px;
+    color: #333;
+    height: 700px;
+    width: 220px;
+  }
 
  .current-weather{
-    margin-top: 40px;
+    margin-top: 10px;
     font-size: 25px;
-    margin-left: 80px;
+    margin-left: 600px;
   }
 
 
@@ -262,19 +323,22 @@ const removeCity = (cityToRemove) => {
   text-align: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   width: 32%;
-  height: 260px;
-  background-color: rgb(240, 221, 232);
-}
+  height: 240px;
+  margin-top:20px;
+  background-color:white;
+ 
+ 
 
+}
 .weather-card h3 {
   font-size: 20px;
   color: purple;
-  margin-bottom: 10px;
+  
 }
 
 .weather-card p {
   font-size: 16px;
-  color: blue;
+  color:white;
 }
 button {
     margin-top: 10px;
@@ -284,8 +348,69 @@ button {
     justify-content: space-between;
     align-items: center;
   }
-  .spacer {
-  margin: 0 30px;
-}
+  .saved-cities-card-body {
+    font-size: 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+  }
+
+  .saved-cities-card-body h5 {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+
+  .weather-info {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 38px;
+    font-size: 15px;
+  }
+
+  .card {
+    height: 100px;
+    width: 180px;
+    padding: 15px;
+    margin-bottom: 10px;
+    margin-left:-60px ;
+   
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  .close-box {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 11px;
+    height: 18px;
+    border: 1px solid red;
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .close-symbol {
+    font-size: 16px;
+    line-height: 1;
+    color: red;
+  }
+  .city-name {
+    cursor: pointer;
+    color: blue;
+    
+  }
+  .form-control{
+    background-color: #c6daf0;
+    margin-top: 5px;
+   
+  }
+  .weather-heading{
+    margin-left: 700px;
+  }
 
 </style>

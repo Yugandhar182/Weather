@@ -2,7 +2,7 @@
 <script>
   import { onMount } from 'svelte';
   import 'bootstrap/dist/css/bootstrap.min.css';
-  import WeatherFetcher from './WeatherFetchcity.svelte';
+  import WeatherFetcher from './WeatherFetchforcity.svelte';
   import Modal from './Modal.svelte';
 
   const apiKey = '16a3974f03c4fcccc82c44efdd5a6a3f';
